@@ -20,7 +20,7 @@ import json
 
 # --- Import modularized components ---
 from components.styles import DARK_MODE
-# Import InventoryList to use as the right-hand panel
+# Import InventoryList (from components.widgets)
 from components.widgets import InventoryList 
 # Import panel builders
 from panels.left import populate_left_panel
@@ -30,19 +30,19 @@ from panels.right import populate_right_panel
 # --- (REMOVED) DraggableTreeWidget class ---
 
 
-# ---------- REVISED: Database Viewer Window (Tree/List View) ----------
+# ---------- REVISED: Database Viewer Window (Tree/Details + Add Button) ----------
 class DbViewerWindow(QtWidgets.QWidget):
     """
-    A new window for displaying database query results.
-    Left panel: QTreeWidget for navigation.
-    Right panel: Draggable InventoryList for items.
+    A new window for displaying database query results in a
+    tree/details view, with an "Add to Sheet" button.
     """
     def __init__(self, title, data, data_type, parent_list, parent_main):
         super().__init__()
         self.parent_list = parent_list
         self.parent_list.append(self)
-        self.parent_main = parent_main # Reference to MainWindow for DB calls
+        self.parent_main = parent_main # Reference to MainWindow
         self.data_type = data_type
+        self.selected_item_data = None # Store the currently clicked item
         
         self.setWindowTitle(title)
         self.resize(800, 600)
@@ -55,32 +55,45 @@ class DbViewerWindow(QtWidgets.QWidget):
         splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
         splitter.setObjectName("viewerSplitter")
         
-        # Left: Tree widget for grouped items (Navigation)
+        # Left: Tree widget for grouped items
         self.tree = QtWidgets.QTreeWidget()
         self.tree.setObjectName("viewerTree")
         self.tree.setHeaderHidden(True)
-        self.tree.setDragEnabled(False) # Left panel is NOT draggable
+        self._populate_tree(data)
         self.tree.itemClicked.connect(self.on_item_clicked)
         
-        # Right: List widget for draggable items
-        self.list = InventoryList() # Use the draggable list widget
-        self.list.setObjectName("viewerList")
-        self.list.setDragEnabled(True) # Right panel IS draggable
+        # --- Right Panel (Details + Button) ---
+        right_panel_widget = QtWidgets.QWidget()
+        right_layout = QtWidgets.QVBoxLayout()
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(10)
+        right_panel_widget.setLayout(right_layout)
+
+        # Right: Text edit for item details
+        self.details = QtWidgets.QTextEdit()
+        self.details.setObjectName("viewerDetails")
+        self.details.setReadOnly(True)
+        self.details.setPlaceholderText("Select an item from the list to see its details.")
         
-        # Populate tree and, if necessary, the initial list
-        self._populate_tree_and_list(data)
+        # Right: "Add to Sheet" Button
+        self.add_button = QtWidgets.QPushButton("Add to Sheet")
+        self.add_button.setEnabled(False) # Disabled by default
+        self.add_button.clicked.connect(self.on_add_to_sheet_clicked)
         
+        right_layout.addWidget(self.details)
+        right_layout.addWidget(self.add_button)
+        # --- End Right Panel ---
+
         splitter.addWidget(self.tree)
-        splitter.addWidget(self.list)
+        splitter.addWidget(right_panel_widget)
         splitter.setSizes([250, 550]) # Initial size split
         
         layout.addWidget(splitter)
         self.setLayout(layout)
 
-    def _populate_tree_and_list(self, data_dicts):
-        """Fills the QTreeWidget and, for flat lists, the QListWidget."""
+    def _populate_tree(self, data_dicts):
+        """Fills the QTreeWidget with grouped items."""
         self.tree.clear()
-        self.list.clear()
         
         if self.data_type == 'spells':
             groups = {}
@@ -90,9 +103,10 @@ class DbViewerWindow(QtWidgets.QWidget):
             for level in sorted(groups.keys()):
                 level_str = "Cantrips" if level == 0 else f"{level}-Level Spells"
                 level_item = QtWidgets.QTreeWidgetItem(self.tree, [level_str])
-                
+                level_item.setFlags(level_item.flags() & ~QtCore.Qt.ItemFlag.ItemIsSelectable)
                 for spell in groups[level]:
                     spell_item = QtWidgets.QTreeWidgetItem(level_item, [spell['name']])
+                    spell_item.setData(0, QtCore.Qt.ItemDataRole.UserRole, spell)
         
         elif self.data_type == 'equipment':
             groups = {}
@@ -103,58 +117,169 @@ class DbViewerWindow(QtWidgets.QWidget):
             
             for cat in sorted(groups.keys()):
                 cat_item = QtWidgets.QTreeWidgetItem(self.tree, [cat.replace('-', ' ').title()])
-
+                cat_item.setFlags(cat_item.flags() & ~QtCore.Qt.ItemFlag.ItemIsSelectable)
                 for item in groups[cat]:
                     item_widget = QtWidgets.QTreeWidgetItem(cat_item, [item['name']])
+                    item_widget.setData(0, QtCore.Qt.ItemDataRole.UserRole, item)
 
         elif self.data_type == 'races':
             current_race_item = None
             for row in data_dicts:
                 if current_race_item is None or current_race_item.text(0) != row['name']:
                     current_race_item = QtWidgets.QTreeWidgetItem(self.tree, [row['name']])
+                    current_race_item.setData(0, QtCore.Qt.ItemDataRole.UserRole, (row, 'race'))
                 
                 if row['subrace_name']:
                     subrace_item = QtWidgets.QTreeWidgetItem(current_race_item, [row['subrace_name']])
+                    subrace_item.setData(0, QtCore.Qt.ItemDataRole.UserRole, (row, 'subrace'))
             self.tree.expandAll()
             
         elif self.data_type in ['features', 'feats', 'classes']:
-            # Flat list: populate BOTH tree and list
+            # Flat list, no groups
             for item in data_dicts:
                 tree_item = QtWidgets.QTreeWidgetItem(self.tree, [item['name']])
-                self.list.addItem(item['name']) # Add to list on the right
+                tree_item.setData(0, QtCore.Qt.ItemDataRole.UserRole, item)
     
     @QtCore.pyqtSlot(QtWidgets.QTreeWidgetItem, int)
     def on_item_clicked(self, item, column):
-        """
-        When a category is clicked, populate the right list with its children.
-        If a child is clicked, do nothing.
-        """
+        """When an item is clicked, show its details and enable the Add button."""
+        data = item.data(0, QtCore.Qt.ItemDataRole.UserRole)
         
-        # --- START FIX ---
-        # Only repopulate the list if a CATEGORY (an item with children) is clicked.
-        if item.childCount() > 0:
-            self.list.clear() # Clear the list on the right
+        if not data:
+            # It's a category item
+            self.details.setHtml("")
+            self.selected_item_data = None
+            self.add_button.setEnabled(False)
+            return
+        
+        # It's a data item
+        self.selected_item_data = data
+        self.add_button.setEnabled(True)
+        self._build_html_display(data)
+
+    def _build_html_display(self, data):
+        """Builds an HTML string to display in the details panel."""
+        html = ""
+        
+        # Data format for races is a tuple: (row_data, 'race'/'subrace')
+        if isinstance(data, tuple):
+            data_dict, item_type = data
+            if item_type == 'race':
+                html = f"<h1>{data_dict['name']}</h1>"
+                html += f"<i>Race</i><hr>"
+                html += f"<b>Speed:</b> {data_dict['speed']} ft.<br>"
+                html += f"<b>Size:</b> {data_dict['size']}<br>"
+                html += f"<b>Alignment:</b> {data_dict.get('alignment', 'Varies')}<br><br>"
+                html += f"<b>Age:</b> {data_dict.get('age', 'Varies')}<br><br>"
+                html += data_dict.get('language_desc', '').replace('\n', '<br>')
             
-            # For Races, add the base race itself as the first draggable item
-            if self.data_type == 'races' and not item.parent():
-                self.list.addItem(item.text(0))
+            elif item_type == 'subrace':
+                html = f"<h1>{data_dict['subrace_name']}</h1>"
+                html += f"<i>Subrace of {data_dict['name']}</i><hr>"
+                html += data_dict.get('subrace_desc', '').replace('\n', '<br>')
+        
+        # All other data types are just a single dictionary
+        elif isinstance(data, dict):
+            name = data.get('name', 'Unknown')
+            desc = data.get('description', data.get('desc', 'No description available.'))
+            if not desc: desc = "No description."
+
+            html = f"<h1>{name}</h1><hr>"
             
-            # Add all children (e.g., all cantrips, all subraces)
-            for i in range(item.childCount()):
-                self.list.addItem(item.child(i).text(0))
+            if self.data_type == 'spells':
+                level_str = "Cantrip" if data['level'] == 0 else f"Level {data['level']}"
+                school = data.get('school_index', 'Unknown School')
+                html += f"<i>{school.title()} {level_str}</i><br><br>"
+                html += f"<b>Casting Time:</b> {data.get('casting_time', 'N/A')}<br>"
+                html += f"<b>Range:</b> {data.get('range', 'N/A')}<br>"
+                html += f"<b>Components:</b> {",".join(data.get('components', []))}<br>"
+                html += f"<b>Duration:</b> {data.get('duration', 'N/A')}"
+                if data.get('concentration'):
+                    html += " (Concentration)"
+                html += "<br><br>"
+                html += desc.replace('\n', '<br>')
+                
+                if data.get('higher_level_desc'):
+                    html += f"<br><br><b>At Higher Levels:</b><br>{data['higher_level_desc'].replace('\n', '<br>')}"
+
+            elif self.data_type == 'equipment':
+                html += f"<b>Category:</b> {data.get('equipment_category_index', 'N/A')}<br>"
+                html += f"<b>Cost:</b> {data.get('cost_quantity', 0)} {data.get('cost_unit', 'gp')}<br>"
+                html += f"<b>Weight:</b> {data.get('weight', 0)} lb.<br><br>"
+                
+                if data.get('damage_dice'):
+                     html += f"<b>Damage:</b> {data.get('damage_dice')} {data.get('damage_type_index', '')}<br>"
+                if data.get('armor_class_base'):
+                     html += f"<b>Base AC:</b> {data.get('armor_class_base')}<br>"
+                
+                html += "<br>" + desc.replace('\n', '<br>')
+            
+            elif self.data_type == 'classes':
+                html += f"<b>Hit Die:</b> d{data.get('hit_die', 'N/A')}<br>"
+                if data.get('spellcasting_ability_index'):
+                    html += f"<b>Spellcasting:</b> {data.get('spellcasting_ability_index').upper()}<br>"
+                html += "<br>" + desc.replace('\n', '<br>')
+                
+            elif self.data_type in ['features', 'feats']:
+                if self.data_type == 'feats' and data.get('prerequisites_json'):
+                    try:
+                        prereqs = json.loads(data['prerequisites_json'])
+                        prereq_strs = []
+                        for p in prereqs:
+                            if p.get('ability_score_index'):
+                                prereq_strs.append(f"{p['ability_score_index'].upper()} {p['minimum_score']}")
+                        if prereq_strs:
+                            html += f"<b>Prerequisites:</b> {', '.join(prereq_strs)}<br><br>"
+                    except json.JSONDecodeError:
+                        pass # Ignore invalid JSON
+
+                html += desc.replace('\n', '<br>')
         
-        # If a child item is clicked (e.g., "Fire Bolt"), do nothing.
-        # This allows the drag operation to start without interference.
-        elif item.parent():
-            pass 
-        
-        # If a flat-list item is clicked (e.g., "Feats"), do nothing.
-        # The list is already populated.
-        elif not item.parent() and not item.childCount():
-            pass
-        # --- END FIX ---
-    
-    # --- (REMOVED) _build_html_display method ---
+        self.details.setHtml(html)
+
+    @QtCore.pyqtSlot()
+    def on_add_to_sheet_clicked(self):
+        """Adds the currently selected item to the main window."""
+        if not self.selected_item_data:
+            return
+            
+        item_name = None
+        # Get the name from the item
+        if isinstance(self.selected_item_data, tuple):
+            data_dict, item_type = self.selected_item_data
+            if item_type == 'race':
+                item_name = data_dict.get('name')
+            elif item_type == 'subrace':
+                item_name = data_dict.get('subrace_name')
+        elif isinstance(self.selected_item_data, dict):
+            item_name = self.selected_item_data.get('name')
+            
+        if not item_name:
+            return
+
+        # Add the item to the correct list on the main window
+        try:
+            target_list = None
+            if self.data_type == 'spells':
+                target_list = self.parent_main.spell_info
+            elif self.data_type == 'equipment':
+                target_list = self.parent_main.inventory
+            elif self.data_type == 'feats':
+                target_list = self.parent_main.feats_txt
+            elif self.data_type == 'features':
+                target_list = self.parent_main.feature_txt
+            elif self.data_type == 'classes':
+                self.parent_main.class_edit.setText(item_name)
+            elif self.data_type == 'races':
+                self.parent_main.race_edit.setText(item_name)
+            
+            if target_list and isinstance(target_list, QtWidgets.QListWidget):
+                # Add if not already in the list
+                if not target_list.findItems(item_name, QtCore.Qt.MatchFlag.MatchExactly):
+                    target_list.addItem(item_name)
+
+        except Exception as e:
+            print(f"Error adding item to sheet: {e}")
 
 
 # ---------- Main Window ----------

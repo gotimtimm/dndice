@@ -99,6 +99,14 @@ def populate_reference_tables(cursor, file_paths):
                 "INSERT OR IGNORE INTO WeaponProperty (\"index\", name, description) VALUES (?, ?, ?)",
                 [(p['index'], p['name'], '\n'.join(p.get('desc', []))) for p in prop_data]
             )
+        
+        # NEW: Load Languages
+        languages = load_json(file_paths['languages'])
+        if languages:
+            cursor.executemany(
+                "INSERT OR IGNORE INTO Language (\"index\", name, type) VALUES (?, ?, ?)",
+                [(l['index'], l['name'], l.get('type')) for l in languages]
+            )
 
         print("Reference tables populated.")
     except sqlite3.Error as e:
@@ -152,16 +160,16 @@ def populate_class_tables(cursor, file_paths):
 
                 options = choice_from.get('options', [])
                 for option in options:
-                    if option.get('option_type') == 'reference':
+                    if isinstance(option, dict) and option.get('option_type') == 'reference':
                         cursor.execute(
                             "INSERT OR IGNORE INTO ClassProficiencyChoiceOption (choice_id, proficiency_index) VALUES (?, ?)",
                             (choice_id, option['item']['index'])
                         )
-                    elif option.get('option_type') == 'choice':
+                    elif isinstance(option, dict) and option.get('option_type') == 'choice':
                         nested_choice_from = option.get('choice', {}).get('from', {})
                         nested_options = nested_choice_from.get('options', [])
                         for nested_option in nested_options:
-                             if nested_option.get('option_type') == 'reference':
+                             if isinstance(nested_option, dict) and nested_option.get('option_type') == 'reference':
                                 cursor.execute(
                                     "INSERT OR IGNORE INTO ClassProficiencyChoiceOption (choice_id, proficiency_index) VALUES (?, ?)",
                                     (choice_id, nested_option['item']['index'])
@@ -400,6 +408,253 @@ def populate_levels_tables(cursor, file_paths):
         print(f"Error populating level tables: {e}", file=sys.stderr)
         raise
 
+# ---------- NEW: Feat Population Function ----------
+def populate_feat_table(cursor, file_paths):
+    """Populates the Feat table."""
+    print("Populating Feat table...")
+    feats_data = load_json(file_paths['feats'])
+    if not feats_data:
+        print("  Skipping Feats, file not loaded.")
+        return
+    
+    try:
+        for feat in feats_data:
+            prereqs = feat.get('prerequisites', [])
+            prereqs_json = json.dumps(prereqs) if prereqs else None
+            
+            cursor.execute(
+                """INSERT OR IGNORE INTO Feat ("index", name, prerequisites_json, description) 
+                   VALUES (?, ?, ?, ?)""",
+                (
+                    feat['index'], feat['name'],
+                    prereqs_json,
+                    '\n'.join(feat.get('desc', []))
+                )
+            )
+        print("Feat table populated.")
+    except sqlite3.Error as e:
+        print(f"Error populating Feat table: {e}", file=sys.stderr)
+        raise
+
+# ---------- NEW: Race Population Function ----------
+def populate_race_tables(cursor, file_paths):
+    """Populates all tables related to Races."""
+    print("Populating Race tables...")
+    races_data = load_json(file_paths['races'])
+    if not races_data:
+        print("  Skipping Race tables, file not loaded.")
+        return
+
+    try:
+        for race in races_data:
+            cursor.execute(
+                """INSERT OR IGNORE INTO Race ("index", name, speed, alignment, age, size, size_description, language_desc) 
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    race['index'], race['name'], race['speed'],
+                    race.get('alignment'), race.get('age'), race.get('size'),
+                    race.get('size_description'), race.get('language_desc')
+                )
+            )
+            race_index = race['index']
+
+            # Ability Bonuses
+            for bonus in race.get('ability_bonuses', []):
+                cursor.execute(
+                    "INSERT OR IGNORE INTO RaceAbilityBonus (race_index, ability_score_index, bonus) VALUES (?, ?, ?)",
+                    (race_index, bonus['ability_score']['index'], bonus['bonus'])
+                )
+            
+            # Starting Proficiencies
+            for prof in race.get('starting_proficiencies', []):
+                cursor.execute(
+                    "INSERT OR IGNORE INTO RaceProficiency (race_index, proficiency_index) VALUES (?, ?)",
+                    (race_index, prof['index'])
+                )
+
+            # Languages
+            for lang in race.get('languages', []):
+                cursor.execute(
+                    "INSERT OR IGNORE INTO RaceLanguage (race_index, language_index) VALUES (?, ?)",
+                    (race_index, lang['index'])
+                )
+            
+            # Traits (Features)
+            for trait in race.get('traits', []):
+                # Ensure feature exists in Feature table first
+                cursor.execute("INSERT OR IGNORE INTO Feature (\"index\", name) VALUES (?, ?)", (trait['index'], trait['name']))
+                cursor.execute(
+                    "INSERT OR IGNORE INTO RaceFeature (race_index, feature_index) VALUES (?, ?)",
+                    (race_index, trait['index'])
+                )
+
+            # Proficiency Choices (modeled after class choices)
+            for choice in race.get('starting_proficiency_options', []):
+                # --- START FIX ---
+                # Check if choice is a dictionary before trying to access keys
+                if not isinstance(choice, dict):
+                    print(f"  Skipping non-dict proficiency choice for race {race_index}: {choice}")
+                    continue
+                # --- END FIX ---
+
+                cursor.execute(
+                    "INSERT INTO RaceProficiencyChoice (race_index, description, choose, type) VALUES (?, ?, ?, ?)",
+                    (race_index, choice.get('desc'), choice['choose'], choice['type'])
+                )
+                choice_id = cursor.lastrowid
+                choice_from = choice.get('from', {})
+                if not choice_from: continue
+                
+                options = choice_from.get('options', [])
+                for option in options:
+                    if isinstance(option, dict) and option.get('option_type') == 'reference':
+                        cursor.execute(
+                            "INSERT OR IGNORE INTO RaceProficiencyChoiceOption (choice_id, proficiency_index) VALUES (?, ?)",
+                            (choice_id, option['item']['index'])
+                        )
+                    elif isinstance(option, dict) and option.get('option_type') == 'choice':
+                        nested_choice_from = option.get('choice', {}).get('from', {})
+                        nested_options = nested_choice_from.get('options', [])
+                        for nested_option in nested_options:
+                             if isinstance(nested_option, dict) and nested_option.get('option_type') == 'reference':
+                                cursor.execute(
+                                    "INSERT OR IGNORE INTO RaceProficiencyChoiceOption (choice_id, proficiency_index) VALUES (?, ?)",
+                                    (choice_id, nested_option['item']['index'])
+                                )
+
+            # Language Choices
+            for choice in race.get('language_options', []):
+                # --- START FIX ---
+                # Check if choice is a dictionary before trying to access keys
+                if not isinstance(choice, dict):
+                    print(f"  Skipping non-dict language choice for race {race_index}: {choice}")
+                    continue
+                # --- END FIX ---
+
+                cursor.execute(
+                    "INSERT INTO RaceLanguageChoice (race_index, description, choose, type) VALUES (?, ?, ?, ?)",
+                    (race_index, choice.get('desc'), choice['choose'], choice['type'])
+                )
+                choice_id = cursor.lastrowid
+                choice_from = choice.get('from', {})
+                if not choice_from: continue
+                
+                options = choice_from.get('options', [])
+                for option in options:
+                     if isinstance(option, dict) and option.get('option_type') == 'reference':
+                        cursor.execute(
+                            "INSERT OR IGNORE INTO RaceLanguageChoiceOption (choice_id, language_index) VALUES (?, ?)",
+                            (choice_id, option['item']['index'])
+                        )
+                     elif isinstance(option, dict) and option.get('option_type') == 'choice':
+                        nested_choice_from = option.get('choice', {}).get('from', {})
+                        nested_options = nested_choice_from.get('options', [])
+                        for nested_option in nested_options:
+                             if isinstance(nested_option, dict) and nested_option.get('option_type') == 'reference':
+                                cursor.execute(
+                                    "INSERT OR IGNORE INTO RaceLanguageChoiceOption (choice_id, language_index) VALUES (?, ?)",
+                                    (choice_id, nested_option['item']['index'])
+                                )
+        
+        print("Race tables populated.")
+    except sqlite3.Error as e:
+        print(f"Error populating race tables: {e}", file=sys.stderr)
+        raise
+    except Exception as e:
+        print(f"A general error occurred in populate_race_tables: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+        raise
+
+# ---------- NEW: Subrace Population Function ----------
+def populate_subrace_tables(cursor, file_paths):
+    """Populates all tables related to Subraces."""
+    print("Populating Subrace tables...")
+    subraces_data = load_json(file_paths['subraces'])
+    if not subraces_data:
+        print("  Skipping Subrace tables, file not loaded.")
+        return
+
+    try:
+        for subrace in subraces_data:
+            cursor.execute(
+                """INSERT OR IGNORE INTO Subrace ("index", name, race_index, description) 
+                   VALUES (?, ?, ?, ?)""",
+                (
+                    subrace['index'], subrace['name'], subrace['race']['index'],
+                    '\n'.join(subrace.get('desc', []))
+                )
+            )
+            subrace_index = subrace['index']
+
+            # Ability Bonuses
+            for bonus in subrace.get('ability_bonuses', []):
+                cursor.execute(
+                    "INSERT OR IGNORE INTO SubraceAbilityBonus (subrace_index, ability_score_index, bonus) VALUES (?, ?, ?)",
+                    (subrace_index, bonus['ability_score']['index'], bonus['bonus'])
+                )
+            
+            # Starting Proficiencies
+            for prof in subrace.get('starting_proficiencies', []):
+                cursor.execute(
+                    "INSERT OR IGNORE INTO SubraceProficiency (subrace_index, proficiency_index) VALUES (?, ?)",
+                    (subrace_index, prof['index'])
+                )
+
+            # Languages
+            for lang in subrace.get('languages', []):
+                cursor.execute(
+                    "INSERT OR IGWE IGNORE INTO SubraceLanguage (subrace_index, language_index) VALUES (?, ?)",
+                    (subrace_index, lang['index'])
+                )
+            
+            # Traits (Features) - Note: key is 'racial_traits' in subrace json
+            for trait in subrace.get('racial_traits', []): 
+                cursor.execute("INSERT OR IGNORE INTO Feature (\"index\", name) VALUES (?, ?)", (trait['index'], trait['name']))
+                cursor.execute(
+                    "INSERT OR IGNORE INTO SubraceFeature (subrace_index, feature_index) VALUES (?, ?)",
+                    (subrace_index, trait['index'])
+                )
+
+            # Language Choices
+            for choice in subrace.get('language_options', []):
+                # --- START FIX ---
+                # Check if choice is a dictionary before trying to access keys
+                if not isinstance(choice, dict):
+                    print(f"  Skipping non-dict language choice for subrace {subrace_index}: {choice}")
+                    continue
+                # --- END FIX ---
+
+                cursor.execute(
+                    "INSERT INTO SubraceLanguageChoice (subrace_index, description, choose, type) VALUES (?, ?, ?, ?)",
+                    (subrace_index, choice.get('desc'), choice['choose'], choice['type'])
+                )
+                choice_id = cursor.lastrowid
+                choice_from = choice.get('from', {})
+                if not choice_from: continue
+                
+                options = choice_from.get('options', [])
+                for option in options:
+                     if isinstance(option, dict) and option.get('option_type') == 'reference':
+                        cursor.execute(
+                            "INSERT OR IGNORE INTO SubraceLanguageChoiceOption (choice_id, language_index) VALUES (?, ?)",
+                            (choice_id, option['item']['index'])
+                        )
+                     elif isinstance(option, dict) and option.get('option_type') == 'choice':
+                        nested_choice_from = option.get('choice', {}).get('from', {})
+                        nested_options = nested_choice_from.get('options', [])
+                        for nested_option in nested_options:
+                             if isinstance(nested_option, dict) and nested_option.get('option_type') == 'reference':
+                                cursor.execute(
+                                    "INSERT OR IGNORE INTO SubraceLanguageChoiceOption (choice_id, language_index) VALUES (?, ?)",
+                                    (choice_id, nested_option['item']['index'])
+                                )
+        
+        print("Subrace tables populated.")
+    except sqlite3.Error as e:
+        print(f"Error populating subrace tables: {e}", file=sys.stderr)
+        raise
+
 # --- Main Execution ---
 
 def main():
@@ -419,6 +674,11 @@ def main():
         'ability_scores': os.path.join(MODULES_DIR, '5e-SRD-Ability-Scores.json'),
         'damage_types': os.path.join(MODULES_DIR, '5e-SRD-Damage-Types.json'),
         'magic_schools': os.path.join(MODULES_DIR, '5e-SRD-Magic-Schools.json'),
+        # NEWLY ADDED
+        'races': os.path.join(MODULES_DIR, '5e-SRD-Races.json'),
+        'subraces': os.path.join(MODULES_DIR, '5e-SRD-Subraces.json'),
+        'languages': os.path.join(MODULES_DIR, '5e-SRD-Languages.json'),
+        'feats': os.path.join(MODULES_DIR, '5e-SRD-Feats.json'),
     }
     
     # Check if DB already exists and delete it for a clean build
@@ -434,7 +694,7 @@ def main():
         create_tables(cursor)
         
         # Populate tables in order of dependency
-        populate_reference_tables(cursor, file_paths)
+        populate_reference_tables(cursor, file_paths) # Now includes Languages
         
         populate_class_tables(cursor, file_paths) 
         
@@ -443,7 +703,12 @@ def main():
         populate_spell_tables(cursor, file_paths)
         populate_equipment_tables(cursor, file_paths)
         
-        populate_levels_tables(cursor, file_paths)
+        populate_levels_tables(cursor, file_paths) # Populates Features, which Races depend on
+        
+        # NEWLY ADDED
+        populate_race_tables(cursor, file_paths)
+        populate_subrace_tables(cursor, file_paths)
+        populate_feat_table(cursor, file_paths)
         
         # Save changes
         conn.commit()

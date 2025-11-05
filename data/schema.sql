@@ -229,3 +229,152 @@ CREATE TABLE IF NOT EXISTS SubclassLevel_Feature (
     FOREIGN KEY (subclass_level_id) REFERENCES SubclassLevel(id),
     FOREIGN KEY (feature_index) REFERENCES Feature("index")
 );
+
+CREATE TABLE IF NOT EXISTS Feat (
+    "index" VARCHAR(100) PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    prerequisites_json TEXT,
+    description TEXT
+);
+
+CREATE TABLE IF NOT EXISTS Language (
+    "index" VARCHAR(100) PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    type VARCHAR(50)
+);
+
+CREATE TABLE IF NOT EXISTS Race (
+    "index" VARCHAR(100) PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    speed INT,
+    alignment TEXT,
+    age TEXT,
+    size VARCHAR(50),
+    size_description TEXT,
+    language_desc TEXT
+);
+
+CREATE TABLE IF NOT EXISTS RaceAbilityBonus (
+    race_index VARCHAR(100),
+    ability_score_index VARCHAR(10),
+    bonus INT NOT NULL,
+    PRIMARY KEY (race_index, ability_score_index),
+    FOREIGN KEY (race_index) REFERENCES Race("index"),
+    FOREIGN KEY (ability_score_index) REFERENCES AbilityScore("index")
+);
+
+CREATE TABLE IF NOT EXISTS RaceProficiency (
+    race_index VARCHAR(100),
+    proficiency_index VARCHAR(100),
+    PRIMARY KEY (race_index, proficiency_index),
+    FOREIGN KEY (race_index) REFERENCES Race("index"),
+    FOREIGN KEY (proficiency_index) REFERENCES Proficiency("index")
+);
+
+CREATE TABLE IF NOT EXISTS RaceLanguage (
+    race_index VARCHAR(100),
+    language_index VARCHAR(100),
+    PRIMARY KEY (race_index, language_index),
+    FOREIGN KEY (race_index) REFERENCES Race("index"),
+    FOREIGN KEY (language_index) REFERENCES Language("index")
+);
+
+CREATE TABLE IF NOT EXISTS RaceFeature (
+    race_index VARCHAR(100),
+    feature_index VARCHAR(100),
+    PRIMARY KEY (race_index, feature_index),
+    FOREIGN KEY (race_index) REFERENCES Race("index"),
+    FOREIGN KEY (feature_index) REFERENCES Feature("index")
+);
+
+CREATE TABLE IF NOT EXISTS RaceProficiencyChoice (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    race_index VARCHAR(100) NOT NULL,
+    description TEXT,
+    choose INT NOT NULL,
+    type VARCHAR(50) NOT NULL,
+    FOREIGN KEY (race_index) REFERENCES Race("index")
+);
+
+CREATE TABLE IF NOT EXISTS RaceProficiencyChoiceOption (
+    choice_id INT,
+    proficiency_index VARCHAR(100),
+    PRIMARY KEY (choice_id, proficiency_index),
+    FOREIGN KEY (choice_id) REFERENCES RaceProficiencyChoice(id),
+    FOREIGN KEY (proficiency_index) REFERENCES Proficiency("index")
+);
+
+CREATE TABLE IF NOT EXISTS RaceLanguageChoice (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    race_index VARCHAR(100) NOT NULL,
+    description TEXT,
+    choose INT NOT NULL,
+    type VARCHAR(50) NOT NULL,
+    FOREIGN KEY (race_index) REFERENCES Race("index")
+);
+
+CREATE TABLE IF NOT EXISTS RaceLanguageChoiceOption (
+    choice_id INT,
+    language_index VARCHAR(100),
+    PRIMARY KEY (choice_id, language_index),
+    FOREIGN KEY (choice_id) REFERENCES RaceLanguageChoice(id),
+    FOREIGN KEY (language_index) REFERENCES Language("index")
+);
+
+CREATE TABLE IF NOT EXISTS Subrace (
+    "index" VARCHAR(100) PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    race_index VARCHAR(100) NOT NULL,
+    description TEXT,
+    FOREIGN KEY (race_index) REFERENCES Race("index")
+);
+
+CREATE TABLE IF NOT EXISTS SubraceAbilityBonus (
+    subrace_index VARCHAR(100),
+    ability_score_index VARCHAR(10),
+    bonus INT NOT NULL,
+    PRIMARY KEY (subrace_index, ability_score_index),
+    FOREIGN KEY (subrace_index) REFERENCES Subrace("index"),
+    FOREIGN KEY (ability_score_index) REFERENCES AbilityScore("index")
+);
+
+CREATE TABLE IF NOT EXISTS SubraceProficiency (
+    subrace_index VARCHAR(100),
+    proficiency_index VARCHAR(100),
+    PRIMARY KEY (subrace_index, proficiency_index),
+    FOREIGN KEY (subrace_index) REFERENCES Subrace("index"),
+    FOREIGN KEY (proficiency_index) REFERENCES Proficiency("index")
+);
+
+CREATE TABLE IF NOT EXISTS SubraceLanguage (
+    subrace_index VARCHAR(100),
+    language_index VARCHAR(100),
+    PRIMARY KEY (subrace_index, language_index),
+    FOREIGN KEY (subrace_index) REFERENCES Subrace("index"),
+    FOREIGN KEY (language_index) REFERENCES Language("index")
+);
+
+CREATE TABLE IF NOT EXISTS SubraceFeature (
+    subrace_index VARCHAR(100),
+    feature_index VARCHAR(100),
+    PRIMARY KEY (subrace_index, feature_index),
+    FOREIGN KEY (subrace_index) REFERENCES Subrace("index"),
+    FOREIGN KEY (feature_index) REFERENCES Feature("index")
+);
+
+CREATE TABLE IF NOT EXISTS SubraceLanguageChoice (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    subrace_index VARCHAR(100) NOT NULL,
+    description TEXT,
+    choose INT NOT NULL,
+    type VARCHAR(50) NOT NULL,
+    FOREIGN KEY (subrace_index) REFERENCES Subrace("index")
+);
+
+CREATE TABLE IF NOT EXISTS SubraceLanguageChoiceOption (
+    choice_id INT,
+    language_index VARCHAR(100),
+    PRIMARY KEY (choice_id, language_index),
+    FOREIGN KEY (choice_id) REFERENCES SubraceLanguageChoice(id),
+    FOREIGN KEY (language_index) REFERENCES Language("index")
+);
