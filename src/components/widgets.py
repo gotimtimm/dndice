@@ -3,6 +3,9 @@
 
 from PyQt6 import QtCore, QtGui, QtWidgets
 
+# --- (REMOVED) DroppableTextEdit class ---
+# We will use the updated InventoryList instead.
+
 # ---------- Drag / Drop: EquipmentSlot ----------
 class EquipmentSlot(QtWidgets.QLabel):
     """
@@ -71,21 +74,42 @@ class EquipmentSlot(QtWidgets.QLabel):
             }
         """)
 
-# ---------- Inventory List ----------
+# ---------- Inventory List (UPDATED) ----------
 class InventoryList(QtWidgets.QListWidget):
     """
     Draggable list widget. Each item has plain text.
+    UPDATED: Now also accepts drops to add new items.
     """
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.SingleSelection)
         self.setDragEnabled(True)
-        self.setAcceptDrops(False)
-        self.setDefaultDropAction(QtCore.Qt.DropAction.MoveAction)
+        # UPDATED: Set to True to accept drops
+        self.setAcceptDrops(True) 
+        self.setDefaultDropAction(QtCore.Qt.DropAction.CopyAction)
         self.setSpacing(4)
         self.setMinimumWidth(220)
         self.setMaximumWidth(320)
 
+    # NEW: Handle incoming drops
+    def dragEnterEvent(self, event: QtGui.QDragEnterEvent) -> None:
+        if event.mimeData().hasText():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    # NEW: Add dropped item to the list
+    def dropEvent(self, event: QtGui.QDropEvent) -> None:
+        text = event.mimeData().text()
+        if text:
+            # Check if item already exists
+            if not self.findItems(text, QtCore.Qt.MatchFlag.MatchExactly):
+                self.addItem(text)
+                event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    # This function handles dragging *from* this list
     def startDrag(self, supportedActions):
         item = self.currentItem()
         if not item:
@@ -106,9 +130,8 @@ class InventoryList(QtWidgets.QListWidget):
         drag.setHotSpot(QtCore.QPoint(10, 10))
         drag.setPixmap(pix)
 
-        result = drag.exec(QtCore.Qt.DropAction.CopyAction | QtCore.Qt.DropAction.MoveAction)
-        # optionally remove item on move; leave it as copy by default.
-        # HOOK: if you want to remove from inventory on equip, do it here.
+        # Use CopyAction by default
+        drag.exec(QtCore.Qt.DropAction.CopyAction)
 
 # ---------- Image Label ----------
 class ImageLabel(QtWidgets.QLabel):

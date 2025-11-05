@@ -2,6 +2,7 @@
 # Populates the right panel of the MainWindow.
 
 from PyQt6 import QtCore, QtGui, QtWidgets
+# UPDATED: We only need InventoryList from our custom widgets
 from components.widgets import InventoryList
 
 def populate_right_panel(main_window: QtWidgets.QMainWindow, layout: QtWidgets.QVBoxLayout):
@@ -84,8 +85,8 @@ def populate_right_panel(main_window: QtWidgets.QMainWindow, layout: QtWidgets.Q
     feats_page = QtWidgets.QWidget()
     feats_layout = QtWidgets.QVBoxLayout()
     feats_layout.setContentsMargins(0, 0, 0, 0) # Remove padding
-    main_window.feats_txt = QtWidgets.QTextEdit()
-    main_window.feats_txt.setPlaceholderText("List feats...")
+    # UPDATED: Use InventoryList
+    main_window.feats_txt = InventoryList()
     feats_layout.addWidget(main_window.feats_txt)
     feats_page.setLayout(feats_layout)
 
@@ -93,18 +94,17 @@ def populate_right_panel(main_window: QtWidgets.QMainWindow, layout: QtWidgets.Q
     feature_page = QtWidgets.QWidget()
     feature_layout = QtWidgets.QVBoxLayout()
     feature_layout.setContentsMargins(0, 0, 0, 0) # Remove padding
-    main_window.feature_txt = QtWidgets.QTextEdit()
-    main_window.feature_txt.setPlaceholderText("List features and special abilities...")
+    # UPDATED: Use InventoryList
+    main_window.feature_txt = InventoryList()
     feature_layout.addWidget(main_window.feature_txt)
-    # --- FIX: Was set to feats_layout, now set to feature_layout ---
     feature_page.setLayout(feature_layout) 
 
     # Spells page
     spells_page = QtWidgets.QWidget()
     spells_vbox = QtWidgets.QVBoxLayout()
     spells_vbox.setContentsMargins(0, 0, 0, 0) # Remove padding
-    main_window.spell_info = QtWidgets.QTextEdit()
-    main_window.spell_info.setPlaceholderText("Known spells, prepared spells, notes...")
+    # UPDATED: Use InventoryList
+    main_window.spell_info = InventoryList()
     spells_vbox.addWidget(main_window.spell_info)
     spells_page.setLayout(spells_vbox)
 
