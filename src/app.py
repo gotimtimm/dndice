@@ -260,6 +260,7 @@ class DbViewerWindow(QtWidgets.QWidget):
         # Add the item to the correct list on the main window
         try:
             target_list = None
+            
             if self.data_type == 'spells':
                 target_list = self.parent_main.spell_info
             elif self.data_type == 'equipment':
@@ -274,12 +275,38 @@ class DbViewerWindow(QtWidgets.QWidget):
                 self.parent_main.race_edit.setText(item_name)
             
             if target_list and isinstance(target_list, QtWidgets.QListWidget):
+                
+                # --- NEW: Check for and remove placeholder ---
+                if target_list.count() == 1:
+                    first_item = target_list.item(0)
+                    # Check if the item is one of our placeholders
+                    if first_item.flags() == QtCore.Qt.ItemFlag.NoItemFlags:
+                        target_list.takeItem(0) # Remove placeholder
+                # --- END NEW ---
+                
                 # Add if not already in the list
                 if not target_list.findItems(item_name, QtCore.Qt.MatchFlag.MatchExactly):
-                    target_list.addItem(item_name)
+                    target_list.addItem(QtWidgets.QListWidgetItem(item_name))
+                
+            # --- Switch-tab logic (this part is also required) ---
+            target_page = None
+            if hasattr(self.parent_main, 'accordion'):
+                if self.data_type == 'spells':
+                    target_page = self.parent_main.spells_page
+                elif self.data_type == 'equipment':
+                    target_page = self.parent_main.inv_page
+                elif self.data_type == 'feats':
+                    target_page = self.parent_main.feats_page
+                elif self.data_type == 'features':
+                    target_page = self.parent_main.feature_page
+                
+                if target_page:
+                    self.parent_main.accordion.setCurrentWidget(target_page)
+            # --- END ---
 
         except Exception as e:
             print(f"Error adding item to sheet: {e}")
+    
 
 
 # ---------- Main Window ----------
