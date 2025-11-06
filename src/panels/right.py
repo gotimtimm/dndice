@@ -89,7 +89,7 @@ def populate_right_panel(main_window: QtWidgets.QMainWindow, layout: QtWidgets.Q
     main_window.feats_txt = InventoryList()
     
     # --- NEW: Add placeholder to fix layout bug ---
-    _feats_placeholder = QtWidgets.QListWidgetItem("No feats added.")
+    _feats_placeholder = QtWidgets.QListWidgetItem("No feats added")
     _feats_placeholder.setFlags(QtCore.Qt.ItemFlag.NoItemFlags) # Not selectable, not enabled
     _feats_placeholder.setForeground(QtGui.QColor("#888a8f")) # Gray
     main_window.feats_txt.addItem(_feats_placeholder)
@@ -106,7 +106,7 @@ def populate_right_panel(main_window: QtWidgets.QMainWindow, layout: QtWidgets.Q
     main_window.feature_txt = InventoryList()
 
     # --- NEW: Add placeholder to fix layout bug ---
-    _features_placeholder = QtWidgets.QListWidgetItem("No features added.")
+    _features_placeholder = QtWidgets.QListWidgetItem("No features added")
     _features_placeholder.setFlags(QtCore.Qt.ItemFlag.NoItemFlags) # Not selectable, not enabled
     _features_placeholder.setForeground(QtGui.QColor("#888a8f")) # Gray
     main_window.feature_txt.addItem(_features_placeholder)
@@ -123,7 +123,7 @@ def populate_right_panel(main_window: QtWidgets.QMainWindow, layout: QtWidgets.Q
     main_window.spell_info = InventoryList()
 
     # --- NEW: Add placeholder to fix layout bug ---
-    _spells_placeholder = QtWidgets.QListWidgetItem("No spells added.")
+    _spells_placeholder = QtWidgets.QListWidgetItem("No spells added")
     _spells_placeholder.setFlags(QtCore.Qt.ItemFlag.NoItemFlags) # Not selectable, not enabled
     _spells_placeholder.setForeground(QtGui.QColor("#888a8f")) # Gray
     main_window.spell_info.addItem(_spells_placeholder)
@@ -138,9 +138,10 @@ def populate_right_panel(main_window: QtWidgets.QMainWindow, layout: QtWidgets.Q
     inv_vbox.setContentsMargins(0, 0, 0, 0) # Remove padding
     main_window.inventory = InventoryList()
     
-    _dummy_item = QtWidgets.QListWidgetItem(" ")
-    main_window.spell_info.addItem(_dummy_item)
-    main_window.spell_info.takeItem(main_window.spell_info.row(_dummy_item))
+    _inventory_placeholder = QtWidgets.QListWidgetItem("No inventory items")
+    _inventory_placeholder.setFlags(QtCore.Qt.ItemFlag.NoItemFlags)
+    _inventory_placeholder.setForeground(QtGui.QColor("#888a8f"))
+    main_window.inventory.addItem(_inventory_placeholder)
 
     inv_vbox.addWidget(main_window.inventory)
     main_window.inv_page.setLayout(inv_vbox)
